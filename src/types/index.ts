@@ -3,6 +3,7 @@ export type RoomStatus = 'active' | 'paused' | 'completed';
 export interface Room {
   code: string;
   adminId: string;
+  adminName: string; // Store admin name for reconnection
   tickets: Ticket[];
   currentTicketIndex: number;
   participants: Participant[];

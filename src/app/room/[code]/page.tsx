@@ -76,14 +76,33 @@ export default function RoomPage({ params }: RoomPageProps) {
     const session = getUserSession();
     
     if (session.id && session.name && session.roomCode === code.toUpperCase()) {
-      setUserId(session.id);
-      setUserName(session.name);
-      // Re-join to ensure we're in the room
+      const sessionName = session.name; // Capture for closure
+      // Re-join to ensure we're in the room and get the correct ID
       fetch(`/api/rooms/${code}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: session.id, name: session.name }),
-      });
+        body: JSON.stringify({ id: session.id, name: sessionName }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            // Use the ID from the server (handles reconnection)
+            const actualUserId = data.data.oderId || session.id;
+            setUserId(actualUserId);
+            setUserName(sessionName);
+            // Update session if ID changed (reconnection)
+            if (actualUserId !== session.id) {
+              setUserSession(actualUserId, sessionName, code.toUpperCase());
+            }
+            setRoom(data.data.room);
+          } else {
+            // Session invalid, need to rejoin
+            setShowJoinModal(true);
+          }
+        })
+        .catch(() => {
+          setShowJoinModal(true);
+        });
     } else {
       // Need to join
       setShowJoinModal(true);
@@ -106,6 +125,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     if (!joinName.trim()) return;
 
     setIsActionLoading(true);
+    setError(null);
     try {
       const newUserId = generateUserId();
       const response = await fetch(`/api/rooms/${code}/join`, {
@@ -116,13 +136,15 @@ export default function RoomPage({ params }: RoomPageProps) {
 
       const data = await response.json();
       if (data.success) {
-        setUserId(newUserId);
+        // Use the ID from the server (may be different if reconnecting)
+        const actualUserId = data.data.oderId || newUserId;
+        setUserId(actualUserId);
         setUserName(joinName.trim());
-        setUserSession(newUserId, joinName.trim(), code.toUpperCase());
-        setRoom(data.data);
+        setUserSession(actualUserId, joinName.trim(), code.toUpperCase());
+        setRoom(data.data.room);
         setShowJoinModal(false);
       } else {
-        setError(data.error);
+        setError(data.error || 'Failed to join room');
       }
     } catch {
       setError('Failed to join room');

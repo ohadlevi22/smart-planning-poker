@@ -76,6 +76,7 @@ export async function createRoom(adminId: string, adminName: string): Promise<Ro
   const room: Room = {
     code,
     adminId,
+    adminName, // Store admin name for reconnection
     tickets: [],
     currentTicketIndex: 0,
     participants: [admin],
@@ -87,26 +88,61 @@ export async function createRoom(adminId: string, adminName: string): Promise<Ro
   return room;
 }
 
-export async function joinRoom(code: string, id: string, name: string): Promise<Room | null> {
+export interface JoinRoomResult {
+  room: Room;
+  oderId: string; // The participant's ID (may be different from input if reconnecting)
+  isReconnect: boolean;
+}
+
+export async function joinRoom(code: string, id: string, name: string): Promise<JoinRoomResult | null> {
   const room = await getRoom(code);
   if (!room) return null;
 
-  // Check if participant already exists
-  const existingParticipant = room.participants.find(p => p.id === id);
-  if (existingParticipant) {
-    // Update name if changed
-    existingParticipant.name = name;
-  } else {
-    const participant: Participant = {
-      id,
-      name,
-      isAdmin: false,
-    };
-    room.participants.push(participant);
+  const normalizedName = name.trim().toLowerCase();
+  
+  // Check if a participant with the same name already exists (case-insensitive)
+  const existingByName = room.participants.find(
+    p => p.name.toLowerCase() === normalizedName
+  );
+  
+  if (existingByName) {
+    // Reconnect: return the existing participant's ID
+    // Check if this is the admin reconnecting
+    if (room.adminName.toLowerCase() === normalizedName) {
+      existingByName.isAdmin = true;
+      room.adminId = existingByName.id;
+    }
+    await saveRoom(room);
+    return { room, oderId: existingByName.id, isReconnect: true };
   }
-
+  
+  // Check if name is already taken by someone else with different ID
+  const nameConflict = room.participants.find(
+    p => p.name.toLowerCase() === normalizedName && p.id !== id
+  );
+  
+  if (nameConflict) {
+    // Name already taken - this shouldn't happen as we checked above
+    return null;
+  }
+  
+  // New participant - check if this is the admin name (they might have lost their session)
+  const isAdmin = room.adminName.toLowerCase() === normalizedName;
+  
+  const participant: Participant = {
+    id,
+    name: name.trim(),
+    isAdmin,
+  };
+  
+  // If this is the admin reconnecting with a new ID, update adminId
+  if (isAdmin) {
+    room.adminId = id;
+  }
+  
+  room.participants.push(participant);
   await saveRoom(room);
-  return room;
+  return { room, oderId: id, isReconnect: false };
 }
 
 export async function addTickets(code: string, tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[]): Promise<Room | null> {

@@ -60,8 +60,10 @@ export default function Home() {
       const data = await response.json();
 
       if (data.success) {
-        setUserSession(userId, joinerName.trim(), data.data.code);
-        router.push(`/room/${data.data.code}`);
+        // Use the ID from the server (may be different if reconnecting)
+        const actualUserId = data.data.oderId || userId;
+        setUserSession(actualUserId, joinerName.trim(), data.data.room.code);
+        router.push(`/room/${data.data.room.code}`);
       } else {
         setError(data.error || 'Room not found');
       }

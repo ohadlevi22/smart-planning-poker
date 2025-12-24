@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { joinRoom } from '@/lib/store';
 import { JoinRoomRequest, ApiResponse, Room } from '@/types';
 
+interface JoinRoomResponse {
+  room: Room;
+  oderId: string;
+  isReconnect: boolean;
+}
+
 // POST /api/rooms/[code]/join - Join a room
 export async function POST(
   request: NextRequest,
@@ -11,25 +17,31 @@ export async function POST(
     const { code } = await params;
     const body: JoinRoomRequest = await request.json();
 
-    if (!body.id || !body.name || body.name.trim().length === 0) {
+    if (!body.name || body.name.trim().length === 0) {
       return NextResponse.json<ApiResponse<never>>(
-        { success: false, error: 'User ID and name are required' },
+        { success: false, error: 'Name is required' },
         { status: 400 }
       );
     }
 
-    const room = await joinRoom(code, body.id, body.name.trim());
+    // Generate ID if not provided
+    const id = body.id || crypto.randomUUID();
+    const result = await joinRoom(code, id, body.name.trim());
 
-    if (!room) {
+    if (!result) {
       return NextResponse.json<ApiResponse<never>>(
-        { success: false, error: 'Room not found' },
+        { success: false, error: 'Room not found or name already taken' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json<ApiResponse<Room>>({
+    return NextResponse.json<ApiResponse<JoinRoomResponse>>({
       success: true,
-      data: room,
+      data: {
+        room: result.room,
+        oderId: result.oderId,
+        isReconnect: result.isReconnect,
+      },
     });
   } catch (error) {
     console.error('Error joining room:', error);
