@@ -3,13 +3,20 @@ import { Ticket, TicketGroup } from '@/types';
 /**
  * Parse Jira CSV export format
  * Expected columns: Issue Type, Issue key, Issue id, Summary, Assignee, Assignee Id, Priority, Status, Description, Parent, Parent key, Parent summary
+ * 
+ * Handles:
+ * - Commas inside quoted fields
+ * - Multi-line descriptions in quoted fields
+ * - Escaped quotes ("") inside fields
  */
 export function parseJiraCSV(content: string): Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[] {
-  const lines = content.split('\n');
-  if (lines.length < 2) return [];
+  // Parse entire CSV handling multi-line quoted fields
+  const records = parseCSVContent(content);
+  
+  if (records.length < 2) return [];
 
   // Parse header to find column indices
-  const header = parseCSVLine(lines[0]);
+  const header = records[0];
   const keyIndex = header.findIndex(h => h.toLowerCase().includes('issue key'));
   const summaryIndex = header.findIndex(h => h.toLowerCase() === 'summary');
   const idIndex = header.findIndex(h => h.toLowerCase().includes('issue id'));
@@ -24,11 +31,9 @@ export function parseJiraCSV(content: string): Omit<Ticket, 'votes' | 'isReveale
 
   const tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const fields = parseCSVLine(line);
+  for (let i = 1; i < records.length; i++) {
+    const fields = records[i];
+    
     const key = fields[keyIndex]?.trim();
     const summary = fields[summaryIndex]?.trim();
     const id = idIndex !== -1 ? fields[idIndex]?.trim() : crypto.randomUUID();
@@ -51,6 +56,66 @@ export function parseJiraCSV(content: string): Omit<Ticket, 'votes' | 'isReveale
   }
 
   return tickets;
+}
+
+/**
+ * Parse CSV content handling multi-line quoted fields
+ * Returns array of records, where each record is an array of field values
+ */
+function parseCSVContent(content: string): string[][] {
+  const records: string[][] = [];
+  let currentRecord: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+  
+  // Normalize line endings
+  const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  for (let i = 0; i < normalizedContent.length; i++) {
+    const char = normalizedContent[i];
+    const nextChar = normalizedContent[i + 1];
+    
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        // Escaped quote - add single quote and skip next
+        currentField += '"';
+        i++;
+      } else if (char === '"') {
+        // End of quoted field
+        inQuotes = false;
+      } else {
+        // Any character inside quotes (including newlines and commas)
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        // Start of quoted field
+        inQuotes = true;
+      } else if (char === ',') {
+        // Field separator
+        currentRecord.push(currentField);
+        currentField = '';
+      } else if (char === '\n') {
+        // End of record (only when not in quotes)
+        currentRecord.push(currentField);
+        if (currentRecord.some(f => f.trim())) { // Only add non-empty records
+          records.push(currentRecord);
+        }
+        currentRecord = [];
+        currentField = '';
+      } else {
+        currentField += char;
+      }
+    }
+  }
+  
+  // Don't forget the last field and record
+  currentRecord.push(currentField);
+  if (currentRecord.some(f => f.trim())) {
+    records.push(currentRecord);
+  }
+  
+  return records;
 }
 
 /**
@@ -111,59 +176,17 @@ export function orderTicketsByParent(tickets: Omit<Ticket, 'votes' | 'isRevealed
 }
 
 /**
- * Parse a single CSV line, handling quoted fields with commas and newlines inside
- */
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-
-    if (inQuotes) {
-      if (char === '"' && nextChar === '"') {
-        // Escaped quote
-        current += '"';
-        i++; // Skip next quote
-      } else if (char === '"') {
-        // End of quoted field
-        inQuotes = false;
-      } else {
-        current += char;
-      }
-    } else {
-      if (char === '"') {
-        // Start of quoted field
-        inQuotes = true;
-      } else if (char === ',') {
-        // Field separator
-        fields.push(current);
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-  }
-
-  // Don't forget the last field
-  fields.push(current);
-
-  return fields;
-}
-
-/**
  * Validate that content looks like a valid Jira CSV
  */
 export function validateJiraCSV(content: string): { valid: boolean; error?: string } {
   try {
-    const lines = content.split('\n');
-    if (lines.length < 2) {
+    const records = parseCSVContent(content);
+    
+    if (records.length < 2) {
       return { valid: false, error: 'CSV must have at least a header and one data row' };
     }
 
-    const header = parseCSVLine(lines[0]);
+    const header = records[0];
     const hasKey = header.some(h => h.toLowerCase().includes('issue key'));
     const hasSummary = header.some(h => h.toLowerCase() === 'summary');
 
