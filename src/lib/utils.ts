@@ -95,12 +95,14 @@ export function generateUserId(): string {
  * Export session summary to CSV
  */
 export function exportSessionToCSV(summary: SessionSummary): void {
-  // Create CSV content
-  const headers = ['Ticket Key', 'Summary', 'Votes', 'Average Vote', 'Agreed Points'];
+  // Create CSV content with parent info
+  const headers = ['Parent Key', 'Parent Summary', 'Ticket Key', 'Summary', 'Votes', 'Average Vote', 'Agreed Points'];
   
   const rows = summary.tickets.map(ticket => {
     const votesStr = ticket.votes.map(v => `${v.oderName}:${v.value}`).join('; ');
     return [
+      ticket.parentKey || '',
+      ticket.parentSummary ? `"${ticket.parentSummary.replace(/"/g, '""')}"` : '',
       ticket.key,
       `"${ticket.summary.replace(/"/g, '""')}"`, // Escape quotes in summary
       `"${votesStr}"`,
@@ -111,12 +113,12 @@ export function exportSessionToCSV(summary: SessionSummary): void {
 
   // Add summary row
   rows.push([]);
-  rows.push(['--- SUMMARY ---', '', '', '', '']);
-  rows.push(['Total Tickets', summary.totalTickets.toString(), '', '', '']);
-  rows.push(['Estimated Tickets', summary.estimatedTickets.toString(), '', '', '']);
-  rows.push(['Total Points', summary.totalPoints.toString(), '', '', '']);
-  rows.push(['Average Points', summary.averagePoints.toString(), '', '', '']);
-  rows.push(['Participants', `"${summary.participants.join(', ')}"`, '', '', '']);
+  rows.push(['--- SUMMARY ---', '', '', '', '', '', '']);
+  rows.push(['Total Tickets', summary.totalTickets.toString(), '', '', '', '', '']);
+  rows.push(['Estimated Tickets', summary.estimatedTickets.toString(), '', '', '', '', '']);
+  rows.push(['Total Points', summary.totalPoints.toString(), '', '', '', '', '']);
+  rows.push(['Average Points', summary.averagePoints.toString(), '', '', '', '', '']);
+  rows.push(['Participants', `"${summary.participants.join(', ')}"`, '', '', '', '', '']);
 
   const csvContent = [
     headers.join(','),

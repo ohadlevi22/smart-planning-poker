@@ -268,6 +268,8 @@ export async function getSessionSummary(code: string): Promise<SessionSummary | 
     return {
       key: ticket.key,
       summary: ticket.summary,
+      parentKey: ticket.parentKey,
+      parentSummary: ticket.parentSummary,
       agreedPoints: ticket.agreedPoints,
       votes: ticket.votes,
       averageVote: Math.round(averageVote * 10) / 10,

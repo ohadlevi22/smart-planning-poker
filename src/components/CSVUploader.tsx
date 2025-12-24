@@ -1,11 +1,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { parseJiraCSV, validateJiraCSV } from '@/lib/csv-parser';
+import { parseJiraCSV, validateJiraCSV, orderTicketsByParent } from '@/lib/csv-parser';
 import { Ticket } from '@/types';
 
 interface CSVUploaderProps {
-  onUpload: (tickets: Omit<Ticket, 'votes' | 'isRevealed'>[]) => void;
+  onUpload: (tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[]) => void;
   isLoading: boolean;
 }
 
@@ -38,7 +38,9 @@ export default function CSVUploader({ onUpload, isLoading }: CSVUploaderProps) {
         return;
       }
 
-      onUpload(tickets);
+      // Order tickets by parent for grouped review
+      const orderedTickets = orderTicketsByParent(tickets);
+      onUpload(orderedTickets);
     } catch {
       setError('Failed to parse CSV file');
     }
@@ -130,8 +132,9 @@ export default function CSVUploader({ onUpload, isLoading }: CSVUploaderProps) {
             </p>
           </div>
           
-          <div className="text-xs text-slate-400 max-w-sm">
-            Expected columns: Issue Type, Issue key, Issue id, Summary, Assignee, Priority, Status
+          <div className="text-xs text-slate-400 max-w-md text-center">
+            <p>Tickets will be grouped by Parent for organized review</p>
+            <p className="mt-1 opacity-70">Supports: Issue key, Summary, Assignee, Description, Parent key, Parent summary</p>
           </div>
         </div>
       </div>
@@ -150,4 +153,3 @@ export default function CSVUploader({ onUpload, isLoading }: CSVUploaderProps) {
     </div>
   );
 }
-

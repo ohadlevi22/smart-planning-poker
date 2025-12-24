@@ -15,6 +15,10 @@ export interface Ticket {
   id: string;
   key: string;
   summary: string;
+  assignee?: string;
+  description?: string;
+  parentKey?: string;
+  parentSummary?: string;
   votes: Vote[];
   isRevealed: boolean;
   agreedPoints?: number;
@@ -77,7 +81,16 @@ export interface SessionSummary {
 export interface TicketSummary {
   key: string;
   summary: string;
+  parentKey?: string;
+  parentSummary?: string;
   agreedPoints?: number;
   votes: Vote[];
   averageVote: number;
+}
+
+// Grouped tickets by parent for display
+export interface TicketGroup {
+  parentKey: string;
+  parentSummary: string;
+  tickets: Ticket[];
 }
