@@ -155,6 +155,82 @@ export function generateUserId(): string {
 }
 
 /**
+ * Format Jira/Confluence markup to clean readable text
+ * Handles common Jira wiki markup syntax
+ */
+export function formatJiraMarkup(text: string): string {
+  if (!text) return '';
+  
+  let formatted = text;
+  
+  // Remove color formatting: {color:#xxx}text{color} or {color:xxx}text{color}
+  formatted = formatted.replace(/\{color[^}]*\}([\s\S]*?)\{color\}/gi, '$1');
+  
+  // Remove panel markup: {panel}text{panel}
+  formatted = formatted.replace(/\{panel[^}]*\}([\s\S]*?)\{panel\}/gi, '$1');
+  
+  // Remove noformat: {noformat}text{noformat}
+  formatted = formatted.replace(/\{noformat\}([\s\S]*?)\{noformat\}/gi, '$1');
+  
+  // Remove code blocks: {code}text{code}
+  formatted = formatted.replace(/\{code[^}]*\}([\s\S]*?)\{code\}/gi, '$1');
+  
+  // Remove quote blocks: {quote}text{quote}
+  formatted = formatted.replace(/\{quote\}([\s\S]*?)\{quote\}/gi, '"$1"');
+  
+  // Convert headers: h1. h2. h3. etc to just the text with line break
+  formatted = formatted.replace(/^h[1-6]\.\s*/gm, '');
+  
+  // Convert bold: *text* to text (but not bullet points)
+  formatted = formatted.replace(/\*([^*\n]+)\*/g, '$1');
+  
+  // Convert italic: _text_ to text
+  formatted = formatted.replace(/_([^_\n]+)_/g, '$1');
+  
+  // Convert strikethrough: -text- to text
+  formatted = formatted.replace(/-([^-\n]+)-/g, '$1');
+  
+  // Convert underline: +text+ to text
+  formatted = formatted.replace(/\+([^+\n]+)\+/g, '$1');
+  
+  // Convert superscript: ^text^ to text
+  formatted = formatted.replace(/\^([^^]+)\^/g, '$1');
+  
+  // Convert subscript: ~text~ to text
+  formatted = formatted.replace(/~([^~]+)~/g, '$1');
+  
+  // Convert links: [text|url] or [url] to just the text/url
+  formatted = formatted.replace(/\[([^|\]]+)\|([^\]]+)\]/g, '$1');
+  formatted = formatted.replace(/\[([^\]]+)\]/g, '$1');
+  
+  // Remove image markup: !image.png! or !image.png|thumbnail!
+  formatted = formatted.replace(/!([^|!\n]+)(\|[^!]*)?\!/g, '[Image: $1]');
+  
+  // Convert bullet points: * item or - item (at start of line)
+  formatted = formatted.replace(/^[\*\-]\s+/gm, '• ');
+  
+  // Convert numbered lists: # item (at start of line)
+  formatted = formatted.replace(/^#\s+/gm, '• ');
+  
+  // Remove anchor markup: {anchor:name}
+  formatted = formatted.replace(/\{anchor:[^}]+\}/g, '');
+  
+  // Remove toc: {toc}
+  formatted = formatted.replace(/\{toc[^}]*\}/gi, '');
+  
+  // Remove emoticons markup: (y) (n) (i) etc
+  formatted = formatted.replace(/\([yni?x/!+\-*#]\)/g, '');
+  
+  // Remove multiple empty lines, replace with single
+  formatted = formatted.replace(/\n{3,}/g, '\n\n');
+  
+  // Trim whitespace
+  formatted = formatted.trim();
+  
+  return formatted;
+}
+
+/**
  * Export session summary to CSV
  */
 export function exportSessionToCSV(summary: SessionSummary): void {

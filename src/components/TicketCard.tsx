@@ -1,7 +1,8 @@
 'use client';
 
 import { Ticket } from '@/types';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { formatJiraMarkup } from '@/lib/utils';
 
 interface TicketCardProps {
   ticket: Ticket;
@@ -11,6 +12,11 @@ interface TicketCardProps {
 
 export default function TicketCard({ ticket, ticketNumber, totalTickets }: TicketCardProps) {
   const [showDescription, setShowDescription] = useState(false);
+  
+  // Format the description to clean up Jira markup
+  const formattedDescription = useMemo(() => {
+    return ticket.description ? formatJiraMarkup(ticket.description) : '';
+  }, [ticket.description]);
 
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 w-full">
@@ -64,7 +70,7 @@ export default function TicketCard({ ticket, ticketNumber, totalTickets }: Ticke
       </h2>
 
       {/* Description (collapsible) */}
-      {ticket.description && (
+      {formattedDescription && (
         <div className="mt-4">
           <button
             onClick={() => setShowDescription(!showDescription)}
@@ -83,8 +89,8 @@ export default function TicketCard({ ticket, ticketNumber, totalTickets }: Ticke
           
           {showDescription && (
             <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-              <div className="text-sm text-slate-600 whitespace-pre-wrap max-h-64 overflow-y-auto prose prose-sm">
-                {ticket.description}
+              <div className="text-sm text-slate-700 whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
+                {formattedDescription}
               </div>
             </div>
           )}
