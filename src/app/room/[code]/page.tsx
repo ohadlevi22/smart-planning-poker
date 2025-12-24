@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Room, Ticket, SessionSummary } from '@/types';
-import { getUserSession, setUserSession, generateUserId, copyToClipboard, calculateVoteStats, exportSessionToCSV } from '@/lib/utils';
+import { getUserSession, setUserSession, generateUserId, copyToClipboard, calculateVoteStats, exportSessionToCSV, getAuthUser, AuthUser } from '@/lib/utils';
 import TicketCard from '@/components/TicketCard';
 import VotingCards from '@/components/VotingCards';
 import ParticipantsList from '@/components/ParticipantsList';
@@ -24,14 +24,13 @@ export default function RoomPage({ params }: RoomPageProps) {
   const router = useRouter();
   
   const [room, setRoom] = useState<Room | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [joinName, setJoinName] = useState('');
   const [showSummary, setShowSummary] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [showSaveReport, setShowSaveReport] = useState(false);
@@ -76,11 +75,19 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   // Initialize session
   useEffect(() => {
+    // Check for authenticated user
+    const user = getAuthUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    setAuthUser(user);
+    
     const session = getUserSession();
     
+    // If user has a session for this room, reconnect
     if (session.id && session.name && session.roomCode === code.toUpperCase()) {
-      const sessionName = session.name; // Capture for closure
-      // Re-join to ensure we're in the room and get the correct ID
+      const sessionName = session.name;
       fetch(`/api/rooms/${code}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,30 +96,53 @@ export default function RoomPage({ params }: RoomPageProps) {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            // Use the ID from the server (handles reconnection)
             const actualUserId = data.data.oderId || session.id;
             setUserId(actualUserId);
             setUserName(sessionName);
-            // Update session if ID changed (reconnection)
             if (actualUserId !== session.id) {
               setUserSession(actualUserId, sessionName, code.toUpperCase());
             }
             setRoom(data.data.room);
           } else {
-            // Session invalid, need to rejoin
-            setShowJoinModal(true);
+            // Session invalid, auto-join with auth user name
+            joinWithAuthUser(user);
           }
         })
         .catch(() => {
-          setShowJoinModal(true);
+          joinWithAuthUser(user);
         });
     } else {
-      // Need to join
-      setShowJoinModal(true);
+      // Auto-join with auth user name
+      joinWithAuthUser(user);
     }
     
     fetchRoom();
-  }, [code, fetchRoom]);
+  }, [code, fetchRoom, router]);
+
+  // Auto-join room with authenticated user's name
+  const joinWithAuthUser = async (user: AuthUser) => {
+    const newUserId = generateUserId();
+    try {
+      const response = await fetch(`/api/rooms/${code}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: newUserId, name: user.name }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        const actualUserId = data.data.oderId || newUserId;
+        setUserId(actualUserId);
+        setUserName(user.name);
+        setUserSession(actualUserId, user.name, code.toUpperCase());
+        setRoom(data.data.room);
+      } else {
+        setError(data.error || 'Failed to join room');
+      }
+    } catch {
+      setError('Failed to join room');
+    }
+  };
 
   // Polling for updates
   useEffect(() => {
@@ -121,40 +151,6 @@ export default function RoomPage({ params }: RoomPageProps) {
     const interval = setInterval(fetchRoom, 2000);
     return () => clearInterval(interval);
   }, [userId, fetchRoom]);
-
-  // Handle join
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!joinName.trim()) return;
-
-    setIsActionLoading(true);
-    setError(null);
-    try {
-      const newUserId = generateUserId();
-      const response = await fetch(`/api/rooms/${code}/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: newUserId, name: joinName.trim() }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        // Use the ID from the server (may be different if reconnecting)
-        const actualUserId = data.data.oderId || newUserId;
-        setUserId(actualUserId);
-        setUserName(joinName.trim());
-        setUserSession(actualUserId, joinName.trim(), code.toUpperCase());
-        setRoom(data.data.room);
-        setShowJoinModal(false);
-      } else {
-        setError(data.error || 'Failed to join room');
-      }
-    } catch {
-      setError('Failed to join room');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
 
   // Handle vote
   const handleVote = async (value: number) => {
@@ -419,56 +415,6 @@ export default function RoomPage({ params }: RoomPageProps) {
           <button
             onClick={() => router.push('/')}
             className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            Back to Home
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // Join modal
-  if (showJoinModal) {
-    return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-slate-800 mb-2 text-center">Join Room</h1>
-          <p className="text-slate-600 mb-6 text-center">
-            Enter your name to join room <span className="font-mono font-bold text-blue-600">{code.toUpperCase()}</span>
-          </p>
-          
-          <form onSubmit={handleJoin} className="space-y-4">
-            <div>
-              <label htmlFor="joinName" className="block text-sm font-medium text-slate-700 mb-2">
-                Your Name
-              </label>
-              <input
-                id="joinName"
-                type="text"
-                value={joinName}
-                onChange={(e) => setJoinName(e.target.value)}
-                placeholder="Enter your name"
-                autoFocus
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-slate-800
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         transition-all duration-200"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={!joinName.trim() || isActionLoading}
-              className="w-full py-3 px-4 bg-blue-600 text-white font-semibold rounded-xl
-                       hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
-                       transition-all duration-200"
-            >
-              {isActionLoading ? 'Joining...' : 'Join Room'}
-            </button>
-          </form>
-          
-          <button
-            onClick={() => router.push('/')}
-            className="w-full mt-4 py-3 px-4 bg-slate-100 text-slate-700 font-semibold rounded-xl
-                     hover:bg-slate-200 transition-all duration-200"
           >
             Back to Home
           </button>

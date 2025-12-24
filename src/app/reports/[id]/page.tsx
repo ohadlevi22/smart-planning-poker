@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { SavedReport } from '@/types';
+import { getAuthUser } from '@/lib/utils';
 
 interface ReportPageProps {
   params: Promise<{ id: string }>;
@@ -18,8 +19,18 @@ export default function ReportDetailPage({ params }: ReportPageProps) {
   const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // Check for authenticated admin user
+    const authUser = getAuthUser();
+    if (!authUser) {
+      router.push('/login');
+      return;
+    }
+    if (!authUser.isAdmin) {
+      router.push('/');
+      return;
+    }
     fetchReport();
-  }, [id]);
+  }, [id, router]);
 
   const fetchReport = async () => {
     try {

@@ -85,6 +85,69 @@ export function clearUserSession(): void {
 }
 
 /**
+ * Authentication helpers
+ */
+const STORAGE_KEY_AUTH_NAME = 'planning-poker-auth-name';
+const STORAGE_KEY_AUTH_EMAIL = 'planning-poker-auth-email';
+const STORAGE_KEY_AUTH_IS_ADMIN = 'planning-poker-auth-is-admin';
+
+// Hardcoded admin credentials
+const ADMIN_NAME = 'ohad';
+const ADMIN_EMAIL = 'ohad.l@taboola.com';
+
+export interface AuthUser {
+  name: string;
+  email: string;
+  isAdmin: boolean;
+}
+
+export function isAdminUser(name: string, email: string): boolean {
+  return name.toLowerCase() === ADMIN_NAME.toLowerCase() && 
+         email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+
+export function getAuthUser(): AuthUser | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  const name = localStorage.getItem(STORAGE_KEY_AUTH_NAME);
+  const email = localStorage.getItem(STORAGE_KEY_AUTH_EMAIL);
+  const isAdmin = localStorage.getItem(STORAGE_KEY_AUTH_IS_ADMIN) === 'true';
+  
+  if (!name || !email) {
+    return null;
+  }
+  
+  return { name, email, isAdmin };
+}
+
+export function setAuthUser(name: string, email: string): AuthUser {
+  if (typeof window === 'undefined') {
+    return { name, email, isAdmin: false };
+  }
+  
+  const isAdmin = isAdminUser(name, email);
+  
+  localStorage.setItem(STORAGE_KEY_AUTH_NAME, name);
+  localStorage.setItem(STORAGE_KEY_AUTH_EMAIL, email);
+  localStorage.setItem(STORAGE_KEY_AUTH_IS_ADMIN, isAdmin.toString());
+  
+  return { name, email, isAdmin };
+}
+
+export function clearAuthUser(): void {
+  if (typeof window === 'undefined') return;
+  
+  localStorage.removeItem(STORAGE_KEY_AUTH_NAME);
+  localStorage.removeItem(STORAGE_KEY_AUTH_EMAIL);
+  localStorage.removeItem(STORAGE_KEY_AUTH_IS_ADMIN);
+  
+  // Also clear session data
+  clearUserSession();
+}
+
+/**
  * Generate a unique user ID
  */
 export function generateUserId(): string {

@@ -3,17 +3,30 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ReportListItem } from '@/types';
+import { getAuthUser, AuthUser } from '@/lib/utils';
 
 export default function ReportsPage() {
   const router = useRouter();
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [reports, setReports] = useState<ReportListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check for authenticated admin user
+    const authUser = getAuthUser();
+    if (!authUser) {
+      router.push('/login');
+      return;
+    }
+    if (!authUser.isAdmin) {
+      router.push('/');
+      return;
+    }
+    setUser(authUser);
     fetchReports();
-  }, []);
+  }, [router]);
 
   const fetchReports = async () => {
     try {
@@ -91,6 +104,12 @@ export default function ReportsPage() {
               <h1 className="text-xl font-bold text-slate-800">Saved Reports</h1>
               <p className="text-sm text-slate-500">View and analyze past planning sessions</p>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+              Admin
+            </span>
+            <span className="text-slate-600">{user?.name}</span>
           </div>
         </div>
       </header>
@@ -192,4 +211,3 @@ export default function ReportsPage() {
     </main>
   );
 }
-
