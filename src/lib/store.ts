@@ -1,8 +1,5 @@
 import { Room, Ticket, Participant, Vote, RoomStatus, SessionSummary, TicketSummary, SavedReport, ReportTicket, ReportVote, ReportListItem } from '@/types';
 
-// Check if we're in a Vercel environment with KV configured
-const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-
 // Room TTL: 7 days (in seconds) - for KV
 const ROOM_TTL = 60 * 60 * 24 * 7;
 
@@ -12,9 +9,20 @@ const localRooms = new Map<string, Room>();
 // Dynamic import of @vercel/kv only when needed
 let kvModule: typeof import('@vercel/kv') | null = null;
 
+// Check KV configuration at runtime (not module load time)
+function isKVConfigured(): boolean {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
 async function getKV() {
-  if (!isKVConfigured) return null;
+  // Check at runtime every time
+  if (!isKVConfigured()) {
+    console.log('[Store] KV not configured, using local storage');
+    return null;
+  }
+  
   if (!kvModule) {
+    console.log('[Store] Loading @vercel/kv module');
     kvModule = await import('@vercel/kv');
   }
   return kvModule.kv;
@@ -39,20 +47,32 @@ function getRoomKey(code: string): string {
 }
 
 export async function getRoom(code: string): Promise<Room | null> {
+  const key = getRoomKey(code);
   const kv = await getKV();
+  
   if (kv) {
-    return await kv.get<Room>(getRoomKey(code));
+    console.log(`[Store] Getting room from KV: ${key}`);
+    const room = await kv.get<Room>(key);
+    console.log(`[Store] Room found: ${room ? 'yes' : 'no'}`);
+    return room;
   }
+  
   // Fallback to local storage
+  console.log(`[Store] Getting room from local storage: ${code.toUpperCase()}`);
   return localRooms.get(code.toUpperCase()) || null;
 }
 
 async function saveRoom(room: Room): Promise<void> {
+  const key = getRoomKey(room.code);
   const kv = await getKV();
+  
   if (kv) {
-    await kv.set(getRoomKey(room.code), room, { ex: ROOM_TTL });
+    console.log(`[Store] Saving room to KV: ${key}`);
+    await kv.set(key, room, { ex: ROOM_TTL });
+    console.log(`[Store] Room saved successfully`);
   } else {
     // Fallback to local storage
+    console.log(`[Store] Saving room to local storage: ${room.code.toUpperCase()}`);
     localRooms.set(room.code.toUpperCase(), room);
   }
 }
