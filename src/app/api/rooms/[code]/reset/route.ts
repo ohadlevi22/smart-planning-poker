@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const room = resetVotes(code);
+    const room = await resetVotes(code);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -22,11 +22,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error resetting votes:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to reset votes' },
       { status: 500 }
     );
   }
 }
-

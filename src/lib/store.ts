@@ -1,7 +1,11 @@
+import { kv } from '@vercel/kv';
 import { Room, Ticket, Participant, Vote } from '@/types';
 
-// In-memory storage for MVP
-const rooms = new Map<string, Room>();
+// Key prefix for rooms in KV store
+const ROOM_KEY_PREFIX = 'room:';
+
+// Room TTL: 24 hours (in seconds)
+const ROOM_TTL = 60 * 60 * 24;
 
 // Generate a 6-character alphanumeric room code
 function generateRoomCode(): string {
@@ -13,15 +17,24 @@ function generateRoomCode(): string {
   return code;
 }
 
-export function getRoom(code: string): Room | undefined {
-  return rooms.get(code.toUpperCase());
+// Helper to get room key
+function getRoomKey(code: string): string {
+  return `${ROOM_KEY_PREFIX}${code.toUpperCase()}`;
 }
 
-export function createRoom(adminId: string, adminName: string): Room {
+export async function getRoom(code: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  return room;
+}
+
+export async function createRoom(adminId: string, adminName: string): Promise<Room> {
   let code = generateRoomCode();
+  
   // Ensure unique code
-  while (rooms.has(code)) {
+  let existingRoom = await kv.get(getRoomKey(code));
+  while (existingRoom) {
     code = generateRoomCode();
+    existingRoom = await kv.get(getRoomKey(code));
   }
 
   const admin: Participant = {
@@ -38,35 +51,35 @@ export function createRoom(adminId: string, adminName: string): Room {
     participants: [admin],
   };
 
-  rooms.set(code, room);
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function joinRoom(code: string, id: string, name: string): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
+export async function joinRoom(code: string, id: string, name: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
 
   // Check if participant already exists
   const existingParticipant = room.participants.find(p => p.id === id);
   if (existingParticipant) {
     // Update name if changed
     existingParticipant.name = name;
-    return room;
+  } else {
+    const participant: Participant = {
+      id,
+      name,
+      isAdmin: false,
+    };
+    room.participants.push(participant);
   }
 
-  const participant: Participant = {
-    id,
-    name,
-    isAdmin: false,
-  };
-
-  room.participants.push(participant);
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function addTickets(code: string, tickets: Omit<Ticket, 'votes' | 'isRevealed'>[]): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
+export async function addTickets(code: string, tickets: Omit<Ticket, 'votes' | 'isRevealed'>[]): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
 
   room.tickets = tickets.map(t => ({
     ...t,
@@ -75,16 +88,17 @@ export function addTickets(code: string, tickets: Omit<Ticket, 'votes' | 'isReve
   }));
   room.currentTicketIndex = 0;
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function vote(code: string, oderId: string, oderName: string, value: number): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
-  if (room.tickets.length === 0) return undefined;
+export async function vote(code: string, oderId: string, oderName: string, value: number): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
 
   const currentTicket = room.tickets[room.currentTicketIndex];
-  if (!currentTicket || currentTicket.isRevealed) return undefined;
+  if (!currentTicket || currentTicket.isRevealed) return null;
 
   // Remove existing vote from this voter
   currentTicket.votes = currentTicket.votes.filter(v => v.oderId !== oderId);
@@ -97,48 +111,52 @@ export function vote(code: string, oderId: string, oderName: string, value: numb
   };
   currentTicket.votes.push(newVote);
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function reveal(code: string): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
-  if (room.tickets.length === 0) return undefined;
+export async function reveal(code: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
 
   const currentTicket = room.tickets[room.currentTicketIndex];
   if (currentTicket) {
     currentTicket.isRevealed = true;
   }
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function nextTicket(code: string): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
+export async function nextTicket(code: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
 
   if (room.currentTicketIndex < room.tickets.length - 1) {
     room.currentTicketIndex++;
   }
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function prevTicket(code: string): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
+export async function prevTicket(code: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
 
   if (room.currentTicketIndex > 0) {
     room.currentTicketIndex--;
   }
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-export function resetVotes(code: string): Room | undefined {
-  const room = rooms.get(code.toUpperCase());
-  if (!room) return undefined;
-  if (room.tickets.length === 0) return undefined;
+export async function resetVotes(code: string): Promise<Room | null> {
+  const room = await kv.get<Room>(getRoomKey(code));
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
 
   const currentTicket = room.tickets[room.currentTicketIndex];
   if (currentTicket) {
@@ -146,12 +164,11 @@ export function resetVotes(code: string): Room | undefined {
     currentTicket.isRevealed = false;
   }
 
+  await kv.set(getRoomKey(code), room, { ex: ROOM_TTL });
   return room;
 }
 
-// Helper to clean up old rooms (could be called periodically)
-export function cleanupOldRooms(): void {
-  // For MVP, we don't implement cleanup
-  // In production, you'd track last activity and remove stale rooms
+// Delete a room (optional cleanup)
+export async function deleteRoom(code: string): Promise<void> {
+  await kv.del(getRoomKey(code));
 }
-

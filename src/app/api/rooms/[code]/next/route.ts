@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const room = nextTicket(code);
+    const room = await nextTicket(code);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -22,11 +22,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error going to next ticket:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to go to next ticket' },
       { status: 500 }
     );
   }
 }
-

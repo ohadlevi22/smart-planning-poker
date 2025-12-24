@@ -18,7 +18,7 @@ export async function POST(
       );
     }
 
-    const room = addTickets(code, body.tickets);
+    const room = await addTickets(code, body.tickets);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -31,11 +31,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error uploading tickets:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to upload tickets' },
       { status: 500 }
     );
   }
 }
-

@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const room = reveal(code);
+    const room = await reveal(code);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -22,11 +22,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error revealing votes:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to reveal votes' },
       { status: 500 }
     );
   }
 }
-

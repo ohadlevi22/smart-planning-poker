@@ -18,7 +18,7 @@ export async function POST(
       );
     }
 
-    const room = joinRoom(code, body.id, body.name.trim());
+    const room = await joinRoom(code, body.id, body.name.trim());
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -31,11 +31,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error joining room:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to join room' },
       { status: 500 }
     );
   }
 }
-

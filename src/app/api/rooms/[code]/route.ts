@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { code } = await params;
-    const room = getRoom(code);
+    const room = await getRoom(code);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -22,11 +22,11 @@ export async function GET(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error getting room:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to get room' },
       { status: 500 }
     );
   }
 }
-

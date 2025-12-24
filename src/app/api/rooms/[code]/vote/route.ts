@@ -26,7 +26,7 @@ export async function POST(
       );
     }
 
-    const room = vote(code, body.oderId, body.oderName, body.value);
+    const room = await vote(code, body.oderId, body.oderName, body.value);
 
     if (!room) {
       return NextResponse.json<ApiResponse<never>>(
@@ -39,11 +39,11 @@ export async function POST(
       success: true,
       data: room,
     });
-  } catch {
+  } catch (error) {
+    console.error('Error voting:', error);
     return NextResponse.json<ApiResponse<never>>(
       { success: false, error: 'Failed to submit vote' },
       { status: 500 }
     );
   }
 }
-
