@@ -1,9 +1,14 @@
+export type RoomStatus = 'active' | 'paused' | 'completed';
+
 export interface Room {
   code: string;
   adminId: string;
   tickets: Ticket[];
   currentTicketIndex: number;
   participants: Participant[];
+  status: RoomStatus;
+  createdAt: string;
+  pausedAt?: string;
 }
 
 export interface Ticket {
@@ -12,6 +17,7 @@ export interface Ticket {
   summary: string;
   votes: Vote[];
   isRevealed: boolean;
+  agreedPoints?: number;
 }
 
 export interface Participant {
@@ -49,6 +55,29 @@ export interface VoteRequest {
 }
 
 export interface UploadTicketsRequest {
-  tickets: Omit<Ticket, 'votes' | 'isRevealed'>[];
+  tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[];
 }
 
+export interface SetAgreedPointsRequest {
+  points: number;
+}
+
+export interface SessionSummary {
+  roomCode: string;
+  totalTickets: number;
+  estimatedTickets: number;
+  totalPoints: number;
+  averagePoints: number;
+  tickets: TicketSummary[];
+  participants: string[];
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface TicketSummary {
+  key: string;
+  summary: string;
+  agreedPoints?: number;
+  votes: Vote[];
+  averageVote: number;
+}

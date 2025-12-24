@@ -2,14 +2,17 @@
 
 import { useEffect, useState, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { Room, Ticket } from '@/types';
-import { getUserSession, setUserSession, generateUserId, copyToClipboard } from '@/lib/utils';
+import { Room, Ticket, SessionSummary } from '@/types';
+import { getUserSession, setUserSession, generateUserId, copyToClipboard, calculateVoteStats, exportSessionToCSV } from '@/lib/utils';
 import TicketCard from '@/components/TicketCard';
 import VotingCards from '@/components/VotingCards';
 import ParticipantsList from '@/components/ParticipantsList';
 import ResultsPanel from '@/components/ResultsPanel';
 import AdminControls from '@/components/AdminControls';
 import CSVUploader from '@/components/CSVUploader';
+import AgreedPointsSelector from '@/components/AgreedPointsSelector';
+import SessionControls from '@/components/SessionControls';
+import SessionSummaryView from '@/components/SessionSummaryView';
 
 interface RoomPageProps {
   params: Promise<{ code: string }>;
@@ -28,6 +31,8 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [copied, setCopied] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinName, setJoinName] = useState('');
+  const [showSummary, setShowSummary] = useState(false);
+  const [summary, setSummary] = useState<SessionSummary | null>(null);
 
   const isAdmin = room && userId === room.adminId;
   const currentTicket: Ticket | undefined = room?.tickets[room.currentTicketIndex];
@@ -49,6 +54,20 @@ export default function RoomPage({ params }: RoomPageProps) {
       setError('Failed to load room');
     } finally {
       setIsLoading(false);
+    }
+  }, [code]);
+
+  // Fetch summary
+  const fetchSummary = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/rooms/${code}/summary`);
+      const data = await response.json();
+      if (data.success) {
+        setSummary(data.data);
+        setShowSummary(true);
+      }
+    } catch {
+      // Silent fail
     }
   }, [code]);
 
@@ -114,7 +133,7 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   // Handle vote
   const handleVote = async (value: number) => {
-    if (!userId || !userName || currentTicket?.isRevealed) return;
+    if (!userId || !userName || currentTicket?.isRevealed || room?.status !== 'active') return;
 
     setIsActionLoading(true);
     try {
@@ -199,8 +218,95 @@ export default function RoomPage({ params }: RoomPageProps) {
     }
   };
 
+  // Handle set agreed points
+  const handleSetAgreedPoints = async (points: number) => {
+    if (!isAdmin) return;
+    
+    setIsActionLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${code}/agree`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points }),
+      });
+      const data = await response.json();
+      if (data.success) setRoom(data.data);
+    } catch {
+      // Silent fail
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle pause session
+  const handlePause = async () => {
+    if (!isAdmin) return;
+    
+    setIsActionLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${code}/pause`, { method: 'POST' });
+      const data = await response.json();
+      if (data.success) setRoom(data.data);
+    } catch {
+      // Silent fail
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle resume session
+  const handleResume = async () => {
+    if (!isAdmin) return;
+    
+    setIsActionLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${code}/resume`, { method: 'POST' });
+      const data = await response.json();
+      if (data.success) setRoom(data.data);
+    } catch {
+      // Silent fail
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle end session
+  const handleEnd = async () => {
+    if (!isAdmin) return;
+    
+    if (!confirm('Are you sure you want to end this session? You can still view the summary afterwards.')) {
+      return;
+    }
+    
+    setIsActionLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${code}/end`, { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        setRoom(data.data);
+        fetchSummary();
+      }
+    } catch {
+      // Silent fail
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  // Handle view summary
+  const handleViewSummary = () => {
+    fetchSummary();
+  };
+
+  // Handle export CSV
+  const handleExportCSV = () => {
+    if (summary) {
+      exportSessionToCSV(summary);
+    }
+  };
+
   // Handle CSV upload
-  const handleUploadTickets = async (tickets: Omit<Ticket, 'votes' | 'isRevealed'>[]) => {
+  const handleUploadTickets = async (tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[]) => {
     if (!isAdmin) return;
 
     setIsActionLoading(true);
@@ -316,9 +422,21 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const ticketsLoaded = room && room.tickets.length > 0;
   const allDone = room && room.currentTicketIndex >= room.tickets.length - 1 && currentTicket?.isRevealed;
+  const isPaused = room?.status === 'paused';
+  const isCompleted = room?.status === 'completed';
+  const voteStats = currentTicket ? calculateVoteStats(currentTicket.votes) : { average: 0, mostCommon: null, distribution: {} };
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
+      {/* Summary Modal */}
+      {showSummary && summary && (
+        <SessionSummaryView
+          summary={summary}
+          onClose={() => setShowSummary(false)}
+          onExportCSV={handleExportCSV}
+        />
+      )}
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -354,6 +472,16 @@ export default function RoomPage({ params }: RoomPageProps) {
                     {room.currentTicketIndex + 1} / {room.tickets.length}
                   </span>
                 )}
+                {/* Status badge */}
+                {room && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    room.status === 'active' ? 'bg-green-100 text-green-700' :
+                    room.status === 'paused' ? 'bg-amber-100 text-amber-700' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>
+                    {room.status}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -369,6 +497,44 @@ export default function RoomPage({ params }: RoomPageProps) {
           </div>
         </div>
       </header>
+
+      {/* Paused banner */}
+      {isPaused && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-amber-800 font-medium">Session is paused</span>
+            {isAdmin && (
+              <button
+                onClick={handleResume}
+                className="ml-4 px-4 py-1.5 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                Resume Session
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Completed banner */}
+      {isCompleted && (
+        <div className="bg-slate-100 border-b border-slate-200 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-3">
+            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-slate-700 font-medium">Session completed</span>
+            <button
+              onClick={handleViewSummary}
+              className="ml-4 px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              View Summary
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -393,22 +559,59 @@ export default function RoomPage({ params }: RoomPageProps) {
               </div>
             )}
           </div>
-        ) : allDone ? (
-          // All tickets done
+        ) : allDone && !isCompleted ? (
+          // All tickets done but session not ended
           <div className="flex flex-col items-center justify-center py-16">
             <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
               <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="text-3xl font-bold text-slate-800 mb-2">All Tickets Estimated! 🎉</h2>
-            <p className="text-slate-600 mb-8">Great job team! You&apos;ve estimated all {room.tickets.length} tickets.</p>
-            <button
-              onClick={() => router.push('/')}
-              className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
-            >
-              Start New Session
-            </button>
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">All Tickets Reviewed! 🎉</h2>
+            <p className="text-slate-600 mb-8">Great job team! You&apos;ve reviewed all {room.tickets.length} tickets.</p>
+            {isAdmin ? (
+              <div className="flex gap-4">
+                <button
+                  onClick={handleViewSummary}
+                  className="px-8 py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  View Summary
+                </button>
+                <button
+                  onClick={handleEnd}
+                  className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  End Session
+                </button>
+              </div>
+            ) : (
+              <p className="text-slate-500">Waiting for admin to end the session...</p>
+            )}
+          </div>
+        ) : isCompleted ? (
+          // Session completed
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+              <svg className="w-12 h-12 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold text-slate-800 mb-2">Session Complete</h2>
+            <p className="text-slate-600 mb-8">This planning session has ended.</p>
+            <div className="flex gap-4">
+              <button
+                onClick={handleViewSummary}
+                className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors"
+              >
+                View Summary
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="px-8 py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors"
+              >
+                Start New Session
+              </button>
+            </div>
           </div>
         ) : (
           // Active voting
@@ -426,7 +629,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                   <VotingCards
                     selectedValue={myVote?.value ?? null}
                     onVote={handleVote}
-                    disabled={isActionLoading}
+                    disabled={isActionLoading || isPaused}
                     isRevealed={currentTicket.isRevealed}
                   />
                   
@@ -434,6 +637,16 @@ export default function RoomPage({ params }: RoomPageProps) {
                     votes={currentTicket.votes}
                     isRevealed={currentTicket.isRevealed}
                   />
+
+                  {/* Agreed Points Selector - Admin only, after reveal */}
+                  {isAdmin && currentTicket.isRevealed && (
+                    <AgreedPointsSelector
+                      currentAgreedPoints={currentTicket.agreedPoints}
+                      averageVote={voteStats.average}
+                      onSetPoints={handleSetAgreedPoints}
+                      isLoading={isActionLoading}
+                    />
+                  )}
                 </>
               )}
             </div>
@@ -448,16 +661,27 @@ export default function RoomPage({ params }: RoomPageProps) {
               />
               
               {isAdmin && (
-                <AdminControls
-                  onReveal={handleReveal}
-                  onNext={handleNext}
-                  onPrev={handlePrev}
-                  onReset={handleReset}
-                  isRevealed={currentTicket?.isRevealed ?? false}
-                  canGoNext={room.currentTicketIndex < room.tickets.length - 1}
-                  canGoPrev={room.currentTicketIndex > 0}
-                  isLoading={isActionLoading}
-                />
+                <>
+                  <AdminControls
+                    onReveal={handleReveal}
+                    onNext={handleNext}
+                    onPrev={handlePrev}
+                    onReset={handleReset}
+                    isRevealed={currentTicket?.isRevealed ?? false}
+                    canGoNext={room.currentTicketIndex < room.tickets.length - 1}
+                    canGoPrev={room.currentTicketIndex > 0}
+                    isLoading={isActionLoading}
+                  />
+                  
+                  <SessionControls
+                    status={room.status}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    onEnd={handleEnd}
+                    onViewSummary={handleViewSummary}
+                    isLoading={isActionLoading}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -466,4 +690,3 @@ export default function RoomPage({ params }: RoomPageProps) {
     </main>
   );
 }
-

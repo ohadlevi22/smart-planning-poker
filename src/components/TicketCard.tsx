@@ -38,17 +38,29 @@ export default function TicketCard({ ticket, ticketNumber, totalTickets }: Ticke
       
       {/* Status indicator */}
       <div className="mt-6 pt-6 border-t border-slate-100">
-        <div className="flex items-center gap-2">
-          {ticket.isRevealed ? (
-            <>
-              <div className="w-2 h-2 bg-green-500 rounded-full" />
-              <span className="text-sm text-green-600 font-medium">Votes revealed</span>
-            </>
-          ) : (
-            <>
-              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-              <span className="text-sm text-amber-600 font-medium">Voting in progress</span>
-            </>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {ticket.isRevealed ? (
+              <>
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+                <span className="text-sm text-green-600 font-medium">Votes revealed</span>
+              </>
+            ) : (
+              <>
+                <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                <span className="text-sm text-amber-600 font-medium">Voting in progress</span>
+              </>
+            )}
+          </div>
+          
+          {/* Agreed points badge */}
+          {ticket.agreedPoints !== undefined && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-lg">
+              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-bold text-green-700">{ticket.agreedPoints} pts</span>
+            </div>
           )}
         </div>
       </div>
