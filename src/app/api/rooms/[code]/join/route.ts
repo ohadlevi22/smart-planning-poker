@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { joinRoom } from '@/lib/store';
+import { joinRoom, isJoinRoomError } from '@/lib/store';
 import { JoinRoomRequest, ApiResponse, Room } from '@/types';
 
 interface JoinRoomResponse {
@@ -28,10 +28,12 @@ export async function POST(
     const id = body.id || crypto.randomUUID();
     const result = await joinRoom(code, id, body.name.trim());
 
-    if (!result) {
+    // Check if result is an error
+    if (isJoinRoomError(result)) {
+      const status = result.type === 'room_not_found' ? 404 : 409;
       return NextResponse.json<ApiResponse<never>>(
-        { success: false, error: 'Room not found or name already taken' },
-        { status: 404 }
+        { success: false, error: result.message },
+        { status }
       );
     }
 

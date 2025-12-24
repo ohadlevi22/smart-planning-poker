@@ -94,9 +94,16 @@ export interface JoinRoomResult {
   isReconnect: boolean;
 }
 
-export async function joinRoom(code: string, id: string, name: string): Promise<JoinRoomResult | null> {
+export interface JoinRoomError {
+  type: 'room_not_found' | 'name_taken';
+  message: string;
+}
+
+export async function joinRoom(code: string, id: string, name: string): Promise<JoinRoomResult | JoinRoomError> {
   const room = await getRoom(code);
-  if (!room) return null;
+  if (!room) {
+    return { type: 'room_not_found', message: 'Room not found. It may have expired or the code is incorrect.' };
+  }
 
   const normalizedName = name.trim().toLowerCase();
   
@@ -116,16 +123,6 @@ export async function joinRoom(code: string, id: string, name: string): Promise<
     return { room, oderId: existingByName.id, isReconnect: true };
   }
   
-  // Check if name is already taken by someone else with different ID
-  const nameConflict = room.participants.find(
-    p => p.name.toLowerCase() === normalizedName && p.id !== id
-  );
-  
-  if (nameConflict) {
-    // Name already taken - this shouldn't happen as we checked above
-    return null;
-  }
-  
   // New participant - check if this is the admin name (they might have lost their session)
   const isAdmin = room.adminName.toLowerCase() === normalizedName;
   
@@ -143,6 +140,11 @@ export async function joinRoom(code: string, id: string, name: string): Promise<
   room.participants.push(participant);
   await saveRoom(room);
   return { room, oderId: id, isReconnect: false };
+}
+
+// Type guard for JoinRoomError
+export function isJoinRoomError(result: JoinRoomResult | JoinRoomError): result is JoinRoomError {
+  return 'type' in result && 'message' in result;
 }
 
 export async function addTickets(code: string, tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[]): Promise<Room | null> {
