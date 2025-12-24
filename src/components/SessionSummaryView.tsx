@@ -7,6 +7,8 @@ interface SessionSummaryViewProps {
   summary: SessionSummary;
   onClose: () => void;
   onExportCSV: () => void;
+  onSaveReport?: () => void;
+  reportSaved?: boolean;
 }
 
 interface TicketGroupSummary {
@@ -20,6 +22,8 @@ export default function SessionSummaryView({
   summary,
   onClose,
   onExportCSV,
+  onSaveReport,
+  reportSaved,
 }: SessionSummaryViewProps) {
   // Group tickets by parent
   const groupedTickets = useMemo(() => {
@@ -191,27 +195,52 @@ export default function SessionSummaryView({
         </div>
 
         {/* Footer with participants and export */}
-        <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <div>
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Participants</p>
-            <div className="flex gap-2 flex-wrap">
-              {summary.participants.map((name, i) => (
-                <span key={i} className="inline-flex px-2 py-1 bg-white text-slate-600 rounded text-sm border border-slate-200">
-                  {name}
-                </span>
-              ))}
+        <div className="p-6 border-t border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Participants</p>
+              <div className="flex gap-2 flex-wrap">
+                {summary.participants.map((name, i) => (
+                  <span key={i} className="inline-flex px-2 py-1 bg-white text-slate-600 rounded text-sm border border-slate-200">
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {onSaveReport && (
+                reportSaved ? (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 rounded-xl">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="font-medium">Report Saved!</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={onSaveReport}
+                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl
+                             hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    Save Report
+                  </button>
+                )
+              )}
+              <button
+                onClick={onExportCSV}
+                className="px-6 py-3 bg-green-600 text-white font-semibold rounded-xl
+                         hover:bg-green-700 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export CSV
+              </button>
             </div>
           </div>
-          <button
-            onClick={onExportCSV}
-            className="px-6 py-3 bg-green-600 text-white font-semibold rounded-xl
-                     hover:bg-green-700 transition-colors flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export CSV
-          </button>
         </div>
       </div>
     </div>

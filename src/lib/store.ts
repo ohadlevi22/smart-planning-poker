@@ -1,4 +1,4 @@
-import { Room, Ticket, Participant, Vote, RoomStatus, SessionSummary, TicketSummary } from '@/types';
+import { Room, Ticket, Participant, Vote, RoomStatus, SessionSummary, TicketSummary, SavedReport, ReportTicket, ReportVote, ReportListItem } from '@/types';
 
 // Check if we're in a Vercel environment with KV configured
 const isKVConfigured = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
@@ -338,4 +338,164 @@ export async function deleteRoom(code: string): Promise<void> {
   } else {
     localRooms.delete(code.toUpperCase());
   }
+}
+
+// ==================== REPORTS ====================
+
+const REPORT_KEY_PREFIX = 'report:';
+const REPORT_INDEX_KEY = 'reports:index';
+
+// Report TTL: 365 days (in seconds)
+const REPORT_TTL = 60 * 60 * 24 * 365;
+
+// In-memory fallback storage for reports (local development)
+const localReports = new Map<string, SavedReport>();
+const localReportIndex: string[] = [];
+
+function getReportKey(id: string): string {
+  return `${REPORT_KEY_PREFIX}${id}`;
+}
+
+function generateReportId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Save a report from a room session
+export async function saveReport(roomCode: string, reportName: string, adminName: string): Promise<SavedReport | null> {
+  const room = await getRoom(roomCode);
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
+
+  const reportId = generateReportId();
+
+  // Convert tickets to report format
+  const reportTickets: ReportTicket[] = room.tickets.map(ticket => {
+    const totalVotes = ticket.votes.reduce((sum, v) => sum + v.value, 0);
+    const averageVote = ticket.votes.length > 0 ? totalVotes / ticket.votes.length : 0;
+
+    const votes: ReportVote[] = ticket.votes.map(v => ({
+      participantName: v.oderName,
+      value: v.value,
+    }));
+
+    return {
+      key: ticket.key,
+      summary: ticket.summary,
+      assignee: ticket.assignee,
+      parentKey: ticket.parentKey,
+      parentSummary: ticket.parentSummary,
+      agreedPoints: ticket.agreedPoints,
+      averageVote: Math.round(averageVote * 10) / 10,
+      votes,
+    };
+  });
+
+  const estimatedTickets = room.tickets.filter(t => t.agreedPoints !== undefined);
+  const totalPoints = estimatedTickets.reduce((sum, t) => sum + (t.agreedPoints || 0), 0);
+
+  const report: SavedReport = {
+    id: reportId,
+    name: reportName.trim(),
+    roomCode: room.code,
+    createdAt: new Date().toISOString(),
+    createdBy: adminName,
+    totalTickets: room.tickets.length,
+    estimatedTickets: estimatedTickets.length,
+    totalPoints,
+    averagePoints: estimatedTickets.length > 0 ? Math.round((totalPoints / estimatedTickets.length) * 10) / 10 : 0,
+    participants: room.participants.map(p => p.name),
+    tickets: reportTickets,
+  };
+
+  const kv = await getKV();
+  if (kv) {
+    // Save report
+    await kv.set(getReportKey(reportId), report, { ex: REPORT_TTL });
+    
+    // Add to index
+    const index = await kv.get<string[]>(REPORT_INDEX_KEY) || [];
+    index.unshift(reportId); // Add to beginning (newest first)
+    await kv.set(REPORT_INDEX_KEY, index, { ex: REPORT_TTL });
+  } else {
+    // Fallback to local storage
+    localReports.set(reportId, report);
+    localReportIndex.unshift(reportId);
+  }
+
+  return report;
+}
+
+// Get a single report by ID
+export async function getReport(id: string): Promise<SavedReport | null> {
+  const kv = await getKV();
+  if (kv) {
+    return await kv.get<SavedReport>(getReportKey(id));
+  }
+  return localReports.get(id) || null;
+}
+
+// Get all reports (list view)
+export async function getAllReports(): Promise<ReportListItem[]> {
+  const kv = await getKV();
+  
+  if (kv) {
+    const index = await kv.get<string[]>(REPORT_INDEX_KEY) || [];
+    const reports: ReportListItem[] = [];
+    
+    for (const id of index) {
+      const report = await kv.get<SavedReport>(getReportKey(id));
+      if (report) {
+        reports.push({
+          id: report.id,
+          name: report.name,
+          roomCode: report.roomCode,
+          createdAt: report.createdAt,
+          createdBy: report.createdBy,
+          totalTickets: report.totalTickets,
+          totalPoints: report.totalPoints,
+        });
+      }
+    }
+    
+    return reports;
+  }
+  
+  // Fallback to local storage
+  return localReportIndex.map(id => {
+    const report = localReports.get(id)!;
+    return {
+      id: report.id,
+      name: report.name,
+      roomCode: report.roomCode,
+      createdAt: report.createdAt,
+      createdBy: report.createdBy,
+      totalTickets: report.totalTickets,
+      totalPoints: report.totalPoints,
+    };
+  });
+}
+
+// Delete a report
+export async function deleteReport(id: string): Promise<boolean> {
+  const kv = await getKV();
+  
+  if (kv) {
+    await kv.del(getReportKey(id));
+    
+    // Remove from index
+    const index = await kv.get<string[]>(REPORT_INDEX_KEY) || [];
+    const newIndex = index.filter(i => i !== id);
+    await kv.set(REPORT_INDEX_KEY, newIndex, { ex: REPORT_TTL });
+    
+    return true;
+  }
+  
+  // Fallback to local storage
+  localReports.delete(id);
+  const idx = localReportIndex.indexOf(id);
+  if (idx > -1) {
+    localReportIndex.splice(idx, 1);
+  }
+  
+  return true;
 }

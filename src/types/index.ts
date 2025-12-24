@@ -95,3 +95,50 @@ export interface TicketGroup {
   parentSummary: string;
   tickets: Ticket[];
 }
+
+// Saved Reports for historical analysis
+export interface SavedReport {
+  id: string;
+  name: string;
+  roomCode: string;
+  createdAt: string;
+  createdBy: string; // Admin name who saved the report
+  totalTickets: number;
+  estimatedTickets: number;
+  totalPoints: number;
+  averagePoints: number;
+  participants: string[];
+  tickets: ReportTicket[];
+}
+
+export interface ReportTicket {
+  key: string;
+  summary: string;
+  assignee?: string;
+  parentKey?: string;
+  parentSummary?: string;
+  agreedPoints?: number;
+  averageVote: number;
+  votes: ReportVote[];
+}
+
+export interface ReportVote {
+  participantName: string;
+  value: number;
+}
+
+export interface ReportListItem {
+  id: string;
+  name: string;
+  roomCode: string;
+  createdAt: string;
+  createdBy: string;
+  totalTickets: number;
+  totalPoints: number;
+}
+
+export interface SaveReportRequest {
+  name: string;
+  roomCode: string;
+  adminName: string;
+}

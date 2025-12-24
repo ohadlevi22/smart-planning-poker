@@ -13,6 +13,7 @@ import CSVUploader from '@/components/CSVUploader';
 import AgreedPointsSelector from '@/components/AgreedPointsSelector';
 import SessionControls from '@/components/SessionControls';
 import SessionSummaryView from '@/components/SessionSummaryView';
+import SaveReportModal from '@/components/SaveReportModal';
 
 interface RoomPageProps {
   params: Promise<{ code: string }>;
@@ -33,6 +34,8 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [joinName, setJoinName] = useState('');
   const [showSummary, setShowSummary] = useState(false);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
+  const [showSaveReport, setShowSaveReport] = useState(false);
+  const [reportSaved, setReportSaved] = useState(false);
 
   const isAdmin = room && userId === room.adminId;
   const currentTicket: Ticket | undefined = room?.tickets[room.currentTicketIndex];
@@ -327,6 +330,38 @@ export default function RoomPage({ params }: RoomPageProps) {
     }
   };
 
+  // Handle save report
+  const handleSaveReport = async (reportName: string) => {
+    if (!isAdmin || !userName) return;
+    
+    setIsActionLoading(true);
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: reportName,
+          roomCode: code.toUpperCase(),
+          adminName: userName,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setShowSaveReport(false);
+        setReportSaved(true);
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => setReportSaved(false), 3000);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   // Handle CSV upload
   const handleUploadTickets = async (tickets: Omit<Ticket, 'votes' | 'isRevealed' | 'agreedPoints'>[]) => {
     if (!isAdmin) return;
@@ -456,6 +491,19 @@ export default function RoomPage({ params }: RoomPageProps) {
           summary={summary}
           onClose={() => setShowSummary(false)}
           onExportCSV={handleExportCSV}
+          onSaveReport={isAdmin ? () => setShowSaveReport(true) : undefined}
+          reportSaved={reportSaved}
+        />
+      )}
+
+      {/* Save Report Modal */}
+      {showSaveReport && userName && (
+        <SaveReportModal
+          roomCode={code.toUpperCase()}
+          adminName={userName}
+          onSave={handleSaveReport}
+          onClose={() => setShowSaveReport(false)}
+          isLoading={isActionLoading}
         />
       )}
 
