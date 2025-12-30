@@ -14,6 +14,7 @@ import AgreedPointsSelector from '@/components/AgreedPointsSelector';
 import SessionControls from '@/components/SessionControls';
 import SessionSummaryView from '@/components/SessionSummaryView';
 import SaveReportModal from '@/components/SaveReportModal';
+import TicketReorderList from '@/components/TicketReorderList';
 
 interface RoomPageProps {
   params: Promise<{ code: string }>;
@@ -379,6 +380,43 @@ export default function RoomPage({ params }: RoomPageProps) {
     }
   };
 
+  // Handle ticket reorder
+  const handleReorderTickets = async (ticketIds: string[]) => {
+    if (!isAdmin) return;
+
+    try {
+      const response = await fetch(`/api/rooms/${code}/reorder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketIds }),
+      });
+
+      const data = await response.json();
+      if (data.success) setRoom(data.data);
+    } catch {
+      // Silent fail - local state is already updated
+    }
+  };
+
+  // Handle start planning
+  const handleStartPlanning = async () => {
+    if (!isAdmin) return;
+
+    setIsActionLoading(true);
+    try {
+      const response = await fetch(`/api/rooms/${code}/start`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (data.success) setRoom(data.data);
+    } catch {
+      setError('Failed to start planning');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   // Handle copy room code
   const handleCopyCode = async () => {
     const success = await copyToClipboard(code.toUpperCase());
@@ -424,6 +462,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   }
 
   const ticketsLoaded = room && room.tickets.length > 0;
+  const planningStarted = room?.planningStarted ?? false;
   const allDone = room && room.currentTicketIndex >= room.tickets.length - 1 && currentTicket?.isRevealed;
   const isPaused = room?.status === 'paused';
   const isCompleted = room?.status === 'completed';
@@ -572,6 +611,29 @@ export default function RoomPage({ params }: RoomPageProps) {
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">Waiting for Admin</h2>
                 <p className="text-slate-600">The admin is uploading tickets...</p>
+              </div>
+            )}
+          </div>
+        ) : ticketsLoaded && !planningStarted ? (
+          // Tickets uploaded but planning not started - show reorder interface
+          <div className="flex flex-col items-center justify-center py-8">
+            {isAdmin ? (
+              <TicketReorderList
+                tickets={room.tickets}
+                onReorder={handleReorderTickets}
+                onStartPlanning={handleStartPlanning}
+                isLoading={isActionLoading}
+              />
+            ) : (
+              <div className="text-center">
+                <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg className="w-10 h-10 text-amber-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Waiting to Start</h2>
+                <p className="text-slate-600">The admin is ordering tickets before starting...</p>
+                <p className="text-slate-500 text-sm mt-2">{room.tickets.length} tickets loaded</p>
               </div>
             )}
           </div>

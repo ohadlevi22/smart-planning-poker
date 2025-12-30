@@ -84,3 +84,4 @@ export default function ResultsPanel({ votes, isRevealed }: ResultsPanelProps) {
   );
 }
 
+

@@ -101,6 +101,7 @@ export async function createRoom(adminId: string, adminName: string): Promise<Ro
     currentTicketIndex: 0,
     participants: [admin],
     status: 'active',
+    planningStarted: false, // Will be set true after admin orders tickets
     createdAt: new Date().toISOString(),
   };
 
@@ -272,6 +273,53 @@ export async function setAgreedPoints(code: string, points: number): Promise<Roo
   if (!currentTicket || !currentTicket.isRevealed) return null;
 
   currentTicket.agreedPoints = points;
+
+  await saveRoom(room);
+  return room;
+}
+
+// Reorder tickets based on new order of ticket IDs
+export async function reorderTickets(code: string, ticketIds: string[]): Promise<Room | null> {
+  const room = await getRoom(code);
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
+  if (room.planningStarted) return null; // Can't reorder after planning started
+
+  // Create a map of ticket id to ticket
+  const ticketMap = new Map<string, typeof room.tickets[0]>();
+  for (const ticket of room.tickets) {
+    ticketMap.set(ticket.id, ticket);
+  }
+
+  // Reorder based on provided IDs
+  const reorderedTickets: typeof room.tickets = [];
+  for (const id of ticketIds) {
+    const ticket = ticketMap.get(id);
+    if (ticket) {
+      reorderedTickets.push(ticket);
+    }
+  }
+
+  // Make sure we didn't lose any tickets
+  if (reorderedTickets.length !== room.tickets.length) {
+    return null; // Invalid reorder request
+  }
+
+  room.tickets = reorderedTickets;
+  await saveRoom(room);
+  return room;
+}
+
+// Start planning session (after ordering tickets)
+export async function startPlanning(code: string): Promise<Room | null> {
+  const room = await getRoom(code);
+  if (!room) return null;
+  if (room.tickets.length === 0) return null;
+  if (room.planningStarted) return null; // Already started
+
+  room.planningStarted = true;
+  room.currentTicketIndex = 0;
+  room.status = 'active';
 
   await saveRoom(room);
   return room;

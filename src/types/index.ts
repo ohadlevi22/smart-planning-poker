@@ -8,6 +8,7 @@ export interface Room {
   currentTicketIndex: number;
   participants: Participant[];
   status: RoomStatus;
+  planningStarted: boolean; // Has admin started the planning session after ordering tickets?
   createdAt: string;
   pausedAt?: string;
 }
@@ -65,6 +66,10 @@ export interface UploadTicketsRequest {
 
 export interface SetAgreedPointsRequest {
   points: number;
+}
+
+export interface ReorderTicketsRequest {
+  ticketIds: string[]; // Array of ticket IDs in the new order
 }
 
 export interface SessionSummary {
